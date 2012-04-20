@@ -31,6 +31,16 @@ import org.apache.hadoop.conf.Configuration;
  * An utility class for I/O related functionality. 
  */
 public class IOUtils {
+  
+      /* @CS438
+     * variables and datatype defined to sort blocks locally 
+     */
+    public static long MIN_MEMORY = 15000000;
+
+    public enum ColDataType {
+      INTEGER, STRINGS
+    }
+
 
   /**
    * Copies from one stream to another.
@@ -250,3 +260,147 @@ public class IOUtils {
     }
   }  
 }
+
+
+  /* 
+   * @CS438
+   * @param filename The name of the file of the block to be replicated.
+   * @param sep the separator for the file. "," for our purposes.
+   * @param col Represents the column to sort on. 
+   * @param ColDataType the type of data in the given column. We use String and Integer.
+   * This function is responsible for sorting a block on a specific column. 
+   */
+  public void sortBlock(String filename, String sep, int col, ColDataType type) throws Exception { 
+    
+  	//used to identify intermediate files
+    long fileNum = 987654321;
+
+		Runtime r = Runtime.getRuntime();
+		long freeMemory = r.freeMemory();
+
+		BufferedReader in = new BufferedReader(new FileReader(filename));
+		ArrayList<String> lines = new ArrayList<String>();
+		String inputLine = "", target = "";
+
+		int counter = 0, len = 0;
+		int index;
+    
+		while ((inputLine = in.readLine()) != null) {
+
+			target = inputLine;	
+      
+      /* Here we append the sort key to the beginning of the string. This is done to reduce usage
+       * of substring and we gain a 25% speedup.  
+       */
+			for(int i = 0; i < col; i++)
+				target = target.substring(target.indexOf(sep)+1);
+        
+			index = target.indexOf(sep);
+			if (index != -1)
+				target = target.substring(0, index);
+        
+			lines.add(target + sep + inputLine);
+			counter++;
+
+      // if false, means we're running low, so we opt to write to disk instead. 
+			if(r.freeMemory() > IOUtils.MIN_MEMORY)      
+				continue;
+
+			String[] lineArray = new String[counter];
+			lines.toArray(lineArray);
+			InputCompare<String> comp = new InputCompare<String>(sep, col, type);
+			Arrays.sort(lineArray, comp);
+
+			ConcurrentSortedWriter csw = new ConcurrentSortedWriter(filename+"s"+fileNum++, lineArray,sep);
+			csw.start();
+			lines.clear();
+			System.gc();
+			counter = 0;
+		}
+
+		String[] lineArray = new String[counter];
+ 		lines.toArray(lineArray); 
+		InputCompare<String> comp = new InputCompare<String>(sep, col, type);
+		Arrays.sort(lineArray);
+	
+		ConcurrentSortedWriter csw = new ConcurrentSortedWriter(filename+"s"+fileNum++, lineArray, sep);
+		csw.start();
+		lines.clear();
+		in.close();
+    
+    /* @CS438 TODO: Implement n-way merge for the intermediate files. 
+     */
+	}
+
+	public class ConcurrentSortedWriter extends Thread { 
+		String filename;
+		String[] arr;
+		String sep;
+
+		public ConcurrentSortedWriter(String filename, String[] arr, String sep) {
+			this.filename = filename;
+			this.arr = arr;
+			this.sep = sep;
+		}
+
+		public void run() {
+			PrintWriter out = null; 
+			try {
+				out = new PrintWriter(new FileWriter(filename));
+				for(int i = 0; i < arr.length; i++) 
+					out.println(arr[i].substring(arr[i].indexOf(sep)+1));
+			}
+			catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+			finally {
+				if(out != null)
+					out.close();
+			}
+		}
+	}
+
+	public class InputCompare<T> implements Comparator<T> {
+
+		private String separator;
+		private int col = 0;
+		private ColDataType type = ColDataType.STRINGS;
+
+		public InputCompare(String separator, int col, ColDataType type) {
+			this.separator = separator;
+			this.col = col;
+			this.type = type;
+		}
+
+		public int compare(T o1, T o2) {
+			if (o1 instanceof String && o2 instanceof String) {
+				String s1 = (String)o1;
+				String s2 = (String)o2;
+        
+				for(int i = 0; i < col; i++) {
+					s1 = s1.substring(s1.indexOf(separator)+1);
+					s2 = s2.substring(s2.indexOf(separator)+1);
+				}
+        
+				int ind1 = s1.indexOf(separator);
+				int ind2 = s2.indexOf(separator);
+        
+				if (ind1 != -1)
+					s1 = s1.substring(0, ind1);
+				if (ind2 != -1)
+					s2 = s2.substring(0, ind2);
+				
+				switch (type) {
+					case INTEGER:
+						return Integer.parseInt(s1) - Integer.parseInt(s2);
+					case STRINGS:
+					default:
+						return s1.compareTo(s2);
+				}
+			}
+		}
+
+		public boolean equals(T o1, T o2) {
+			return compare(o1, o2) == 0;
+		}
+	}
