@@ -259,7 +259,7 @@ public class IOUtils {
     public void write(int b) throws IOException {
     }
   }  
-}
+
   /* 
    * @CS438
    * @param filename The name of the file of the block to be replicated.
@@ -268,10 +268,9 @@ public class IOUtils {
    * @param ColDataType the type of data in the given column. We use String and Integer.
    * This function is responsible for sorting a block on a specific column. 
    */
-  public void sortBlock(String filename, String sep, int col, ColDataType type) throws Exception { 
-    
+  public void sortBlock(String filename, String sep, int col, ColDataType type) throws Exception {   
 		//used to identify intermediate files
-    long fileNum = 987654321;
+  	long fileNum = 987654321;
 
 		Runtime r = Runtime.getRuntime();
 		long freeMemory = r.freeMemory();
@@ -284,7 +283,6 @@ public class IOUtils {
 		int index;
     
 		while ((inputLine = in.readLine()) != null) {
-
 			target = inputLine;	
       
       /* Here we append the sort key to the beginning of the string. This is done to reduce usage
@@ -402,3 +400,4 @@ public class IOUtils {
 			return compare(o1, o2) == 0;
 		}
 	}
+}
