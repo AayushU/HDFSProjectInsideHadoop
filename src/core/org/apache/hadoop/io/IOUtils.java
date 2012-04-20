@@ -391,7 +391,7 @@ public class IOUtils {
 						return Integer.parseInt(s1) - Integer.parseInt(s2);
 					case STRINGS:
 					default:
-						return s1.compareTo(s2);
+						return s1.compareTo(s2); 
 				}
 			}
 		}
